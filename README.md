@@ -1,5 +1,14 @@
 # 无界画布 · 8GB 显存适配版（Local Infinite Canvas 8GB）
 
+[![Release](https://img.shields.io/github/v/release/YangZhuang-J/local-infinite-canvas-8gb?color=2ea44f)](https://github.com/YangZhuang-J/local-infinite-canvas-8gb/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![VRAM](https://img.shields.io/badge/VRAM-8GB%20tested-orange)](README.md)
+[![Workflows](https://img.shields.io/badge/workflows-30%20available-brightgreen)](comfyui-gateway/workflows)
+[![Base](https://img.shields.io/badge/based%20on-ModelScope%20%E6%97%A0%E7%95%8C%E7%94%BB%E5%B8%83-9cf)](https://modelscope.cn/datasets/shensanshu/ComfyUI-Local-Infinite-Canvas)
+
+> **一键下载**：[Release v1.0.0](https://github.com/YangZhuang-J/local-infinite-canvas-8gb/releases/latest)（源码包 10MB + 画布卡片包）
+> **无需 git-lfs**：LFS 文件由 `setup.ps1` 从魔搭自动取回。
+
 把 [ComfyUI-本地无限画布](https://modelscope.cn/datasets/shensanshu/ComfyUI-Local-Infinite-Canvas) 改造成能在
 **RTX 5060 Laptop 8GB 显存 + 32GB 内存** 上跑 AI 漫剧流水线的版本。
 
@@ -80,6 +89,14 @@
 | 内存 | 32GB | H3 需要 21.9GB 常驻（GGUF UNET + Q4 TE） |
 | 硬盘 | **180GB** | 模型约 120GB + 项目 + 输出 |
 | Node.js | 24+ | 本仓库不含 `node/`，需自备 |
+
+## 下载
+
+| 方式 | 内容 |
+|---|---|
+| **[Release 源码包](https://github.com/YangZhuang-J/local-infinite-canvas-8gb/releases/latest)** | 解压即用（633 文件，10MB，不含模型） |
+| **[Release 卡片包](https://github.com/YangZhuang-J/local-infinite-canvas-8gb/releases/latest)** | 只要 6 张画布工作流 JSON 时用 |
+| `git clone` | 需要跟踪后续更新时用 |
 
 ## 快速开始
 
