@@ -11,27 +11,27 @@
 | 项目 | 值 |
 |---|---|
 | ComfyUI 核心 | 0.45.3（Desktop v1.1.9 装的实例） |
-| venv 路径 | `D:\LenovoSoftstore\comfyui\ComfyUI\ComfyUI\.venv` |
-| 共享数据目录 | `D:\LenovoSoftstore\ComfyUI-Shared`（C 盘 junction 过去） |
-| 模型目录 | `D:\LenovoSoftstore\ComfyUI-Shared\models` |
-| 输出目录 | `D:\LenovoSoftstore\ComfyUI-Shared\output\{video,audio}` |
-| 模型清单配置 | `C:\Users\89686\AppData\Roaming\Comfy Desktop\instance-model-paths\inst-1794729840796.yaml` |
+| venv 路径 | `<ComfyUI>\.venv` |
+| 共享数据目录 | `<ComfyUI-Shared>`（C 盘 junction 过去） |
+| 模型目录 | `<ComfyUI-Shared>\models` |
+| 输出目录 | `<ComfyUI-Shared>\output\{video,audio}` |
+| 模型清单配置 | `%USERPROFILE%\AppData\Roaming\Comfy Desktop\instance-model-paths\inst-1794729840796.yaml` |
 
 ### 启动方式（重要）
 
 `ComfyUI` 必须**带 UTF-8 + 关 tqdm**启动，否则 tqdm 进度条写入 ComfyUI 的日志拦截器会抛 `OSError: [Errno 22]`，采样直接崩。
 
-任务计划 `ComfyServer` → `C:\Users\89686\AppData\Local\Temp\comfy_task.bat` → `wsl.exe bash /mnt/d/tmp/start_comfy2.sh`
+任务计划 `ComfyServer` → `%USERPROFILE%\AppData\Local\Temp\comfy_task.bat` → `wsl.exe bash <tmp>/start_comfy2.sh`
 
 ```bash
 export PYTHONUTF8=1
 export PYTHONIOENCODING=utf-8
 export TQDM_DISABLE=1
-cd /mnt/d/LenovoSoftstore/comfyui/ComfyUI/ComfyUI
+cd <ComfyUI>
 exec ./.venv/Scripts/python.exe -s main.py --port 8188 --listen 127.0.0.1 \
-  --extra-model-paths-config "C:\Users\89686\AppData\Roaming\Comfy Desktop\instance-model-paths\inst-1794729840796.yaml" \
-  --input-directory "C:\Users\89686\AppData\Local\Comfy-Desktop\ComfyUI-Shared\input" \
-  --output-directory "C:\Users\89686\AppData\Local\Comfy-Desktop\ComfyUI-Shared\output"
+  --extra-model-paths-config "%USERPROFILE%\AppData\Roaming\Comfy Desktop\instance-model-paths\inst-1794729840796.yaml" \
+  --input-directory "%USERPROFILE%\AppData\Local\Comfy-Desktop\ComfyUI-Shared\input" \
+  --output-directory "%USERPROFILE%\AppData\Local\Comfy-Desktop\ComfyUI-Shared\output"
 ```
 
 ### 已装模型
@@ -186,7 +186,7 @@ PyTorch 超显存会直接 `CUDA out of memory`，不会自动溢出到共享内
 ### 6. 存储必须全在 D 盘
 
 - Comfy Desktop 新版默认把模型/输出建到 `C:\Users\...\AppData\Local\Comfy-Desktop\ComfyUI-Shared`
-- 已用 junction 指向 `D:\LenovoSoftstore\ComfyUI-Shared`
+- 已用 junction 指向 `<ComfyUI-Shared>`
 - 另设环境变量：`HF_HOME=D:\Cache\hf`、`PIP_CACHE_DIR=D:\Cache\pip`、`UV_CACHE_DIR=D:\Cache\uv`
 
 ---
@@ -243,14 +243,14 @@ PyTorch 超显存会直接 `CUDA out of memory`，不会自动溢出到共享内
 ## 附录 F：无限画布部署 + SelfLift 双采实测（2026-11-20）
 
 ### F1 无限画布部署
-- 位置：`D:\Apps\Local-Infinite-Canvas`（129MB，git clone 自魔搭）
+- 位置：`<安装目录>`（129MB，git clone 自魔搭）
 - 架构：画布 :3000 → 网关 :8190 → ComfyUI :8188
 - 仓库用 Git LFS 管 341 个文件，clone 后全是指针。必须手动补：
-  - `node/node.exe` → 用本地 `D:\nodejs24\node.exe` 覆盖
+  - `node/node.exe` → 用本地 `<Node24>\node.exe` 覆盖
   - `comfyui-gateway/src/resources.js`(144KB)、`resources/index.json`(118KB)、`launcher/gateway-deps.zip`(1MB)
   - 下载方式：`https://modelscope.cn/api/v1/datasets/shensanshu/ComfyUI-Local-Infinite-Canvas/resolve/master/<路径>`
 - **`src/public-url.js` 仓库缺失**，我按调用点 `absoluteTaskUrl(config,req,url)` 反推实现
-- 启动：计划任务 `InfiniteCanvas` → `C:\Users\89686\AppData\Local\Temp\canvas_start.bat`
+- 启动：计划任务 `InfiniteCanvas` → `%USERPROFILE%\AppData\Local\Temp\canvas_start.bat`
 - `config.json` 关键项：`stopAdoptedComfyOnCanvasClose:false`（防止关画布杀掉我们的 ComfyUI）、`openBrowser:true`
 - 注意：`closeCanvasStopsBackend:true` → **关网页会把网关和画布一起停掉**
 - 网关会自动往 ComfyUI/custom_nodes 投放 16 个节点包，**必须重启 ComfyUI 才生效**（节点数 1097 → 1722）
@@ -309,7 +309,7 @@ PyTorch 超显存会直接 `CUDA out of memory`，不会自动溢出到共享内
 | `h3-ref2va-drama-vdn.json` | video-h3-ref2va / t2v / frames | **整份换成 SelfLift 链路**（删 ApplyVDNH3Advanced，省 5.13GB VDN 模型）|
 | `h3-character-swap-vdn.json` | video-h3-character-swap | 同上 + 保留换角 LoRA（节点 120）|
 
-脚本：`/mnt/d/tmp/wf/adapt_t0.py`（原文件备份为 `*.orig`）
+脚本：`<tmp>/wf/adapt_t0.py`（原文件备份为 `*.orig`）
 
 ### G2 画布可用性有两层，都要改
 1. **图层面**：loader 的模型枚举（setup 扫描）→ 换 GGUF 即通过
@@ -327,7 +327,7 @@ PyTorch 超显存会直接 `CUDA out of memory`，不会自动溢出到共享内
 ### G4 运维坑
 - **`Stop-ScheduledTask` 不会杀掉启动器派生的 node 子进程** → 改代码后必须
   `Get-CimInstance Win32_Process | where CommandLine -like '*Local-Infinite-Canvas*'` 找到 PID 再 `taskkill /F /T`
-  注意不要杀掉 Pi 自身的 node 进程（`D:\nodejs24\node.exe ...npm/node_modules`）
+  注意不要杀掉 Pi 自身的 node 进程（`<Node24>\node.exe ...npm/node_modules`）
 - 网关重启后要等 40~60 秒才 ready
 
 ---
@@ -406,7 +406,7 @@ UnetLoaderGGUF + CLIPLoaderGGUF(type=minimax) + VAELoader
 - `VERSION` 停在 v0.24.13，新代码装在 `patches/v0.25.3.zip`（200.8MB，LFS）
 - `update.js` 用 `git fetch` + `git pull --ff-only` 或下载 patch.zip 解压覆盖
 - v0.25.x 收益：写歌 INT8/BF16 两档 + oldx Qwen2.1 LoRA 卡 → 对我们价值≈0
-- **结论：不升级**。备份在 `D:\Apps\Local-Infinite-Canvas-backup-20261120`（230MB）+
+- **结论：不升级**。备份在 `<安装目录>-backup-20261120`（230MB）+
   我们的适配脚本存于该目录 `_our-scripts/`
 
 ---
@@ -433,7 +433,7 @@ v0.24.13 的画布**没有音乐工作流**：`registry.json` 只有 `image`(14)
 
 ### 实践方案
 - 音乐生成：由 pi 直接调 ComfyUI 跑 ACE-Step（已验证：20 秒片段 19 秒出片，120 秒约 150 秒）
-- 工作流模板：`/mnt/d/tmp/wf/ace_full3min.json`；画布侧文件
+- 工作流模板：`<tmp>/wf/ace_full3min.json`；画布侧文件
   `ComfyUI/user/default/workflows/ACE_Step_1.5_song.json`
 - 等 v0.25.x（或后续版本）补上写歌 UI 后，这条 audio 卡片即可直接用
 
@@ -496,7 +496,7 @@ BE = useCallback(F => {
 - `ComfyUI-Idol`（7.2MB，GitHub PedroMarinhoDev）→ IdolPreprocessImage / IdolPrecision / IdolInputCamera
 
 ### 适配脚本
-`/mnt/d/tmp/adapt_image_gguf.py`：把 UNETLoader 换成 UnetLoaderGGUF（按 unet_name 关键字映射到 GGUF 文件），
+`<tmp>/adapt_image_gguf.py`：把 UNETLoader 换成 UnetLoaderGGUF（按 unet_name 关键字映射到 GGUF 文件），
 14 个工作流自动改完，原文件备份为 `*.orig`。
 
 ### 两个特例

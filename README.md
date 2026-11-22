@@ -84,7 +84,7 @@
 ## 快速开始
 
 ```powershell
-# 1) 放到要安装的位置，例如 D:\Apps\Local-Infinite-Canvas
+# 1) 放到要安装的位置，例如 <安装目录>
 # 2) 运行安装脚本（会检查环境、修复 LFS 文件、生成配置）
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 

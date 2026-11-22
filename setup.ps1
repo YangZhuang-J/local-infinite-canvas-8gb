@@ -55,7 +55,7 @@ foreach ($rel in $lfsFiles) {
 Write-Host "`n=== 3/5 定位 ComfyUI ==="
 $cfgPath = Join-Path $root "launcher\config.json"
 $candidates = @(
-    "D:\LenovoSoftstore\comfyui\ComfyUI\ComfyUI",
+    "<ComfyUI>",
     "D:\ComfyUI",
     "C:\ComfyUI",
     "$env:USERPROFILE\ComfyUI",
