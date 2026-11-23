@@ -131,7 +131,7 @@
       },
       "baseModels": {
         "param": "unet",
-        "classType": "UNETLoader",
+        "classType": "UnetLoaderGGUF",
         "input": "unet_name",
         "label": "底模",
         "filter": "z-image|z_image|ZiT",
@@ -141,7 +141,8 @@
           "Z-image-ZiT-超越真实BEYOND REALITY-V30.safetensors": "beyond",
           "z-image-turbo_fp8_scaled_e4m3fn_KJ.safetensors": "fp8",
           "z_image_turbo_bf16.safetensors": "bf16",
-          "z_image_turbo_int8_convrot.safetensors": "int8"
+          "z_image_turbo_int8_convrot.safetensors": "int8",
+          "z-image-turbo-Q4_K_M.gguf": "q4"
         }
       },
       "label": "Z-Image Turbo"
@@ -2497,7 +2498,13 @@
           "step": 0.5,
           "default": 1
         }
-      ]
+      ],
+      "baseModels": {
+        "classType": "UnetLoaderGGUF",
+        "aliases": {
+          "krea2_turbo-Q3_K_M.gguf": "q3"
+        }
+      }
     },
     {
       "id": "video-h3-character-swap",
@@ -3196,7 +3203,7 @@
       },
       "baseModels": {
         "param": "unet",
-        "classType": "UNETLoader",
+        "classType": "UnetLoaderGGUF",
         "input": "unet_name",
         "label": "底模",
         "filter": "krea2",
@@ -3205,7 +3212,8 @@
           "krea2_turbo_fp8_scaled.safetensors": "turbo",
           "krea2_turbo_int8_convrot.safetensors": "int8",
           "krea2_raw_fp8_scaled.safetensors": "raw",
-          "SinoXvision_Krea2_Aesthetics_fp8_scale.safetensors": "aesthetics"
+          "SinoXvision_Krea2_Aesthetics_fp8_scale.safetensors": "aesthetics",
+          "krea2_turbo-Q3_K_M.gguf": "q3"
         }
       }
     },
