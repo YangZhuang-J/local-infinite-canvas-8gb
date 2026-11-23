@@ -93,7 +93,8 @@ unet_name: 'z_image_turbo_bf16.safetensors' not in [... 'z-image-turbo-Q4_K_M.gg
 | 右键也能打开创建菜单 | `index-NNUCJQLG.js` 里 `onContextMenu` 处理器改为调用创建菜单（原版只有双击） |
 | **音频模型可选 + 自动默认** | 本地渠道的模型列表是**硬编码在包里的** `WX=[...]`，原本全是 image/video → 音频节点下拉永远为空。①往数组头部插 `{name:"local-tts",capability:"audio"}`；②默认配置里的 `audioModel:""` 改为 `` `${d5}::local-tts` ``，**开箱即选，不用手动配** |
 | **卡片在前端看不到** | 部分工作流的 `baseModels.classType` 还写着 `UNETLoader`，而实际用的是 `UnetLoaderGGUF` → 网关以为找不到可用主模型，就不把它列进 `/v1/models`，画布自然看不到。改为 `UnetLoaderGGUF` 并把本地 GGUF 文件名加进 `aliases` |
-| 破缓存 | `index.html` 里资源加 `?pd=5`（dist 资源是 `immutable` 缓存） |
+| **点生成弹「配置与用户偏好」** | ①模型引用 `渠道id::模型名` 在旧配置里对不上 → `GX()` 返回 null；②`isAiConfigReady()` 要求 `apiKey` 非空，而本地渠道留空也算合法。两者都会直接弹配置窗 | 前端加三层兜底：`GX` 解析不到时按模型名/本地网关渠道兜底并伪造 model；`Gdt` 对 `127.0.0.1/localhost` 渠道允许空 apiKey；`RS` 在渠道无 audio 模型时回退到 `local-tts` |
+| 破缓存 | `index.html` 里资源加 `?pd=6`（dist 资源是 `immutable` 缓存） |
 
 > ⚠️ 若上游更新后重新构建 `dist`，以上前端改动会丢失；CSS 那段在 `index.html` 里可以直接抄回来。
 
@@ -196,6 +197,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 | 卡片报 `400 Value not in list` | `registry.json` 的 `default` 指向未安装的官方模型名 | 已修正 5 处；换模型后记得同步改 |
 | 画布里找不到某张卡 | 该工作流的 `baseModels.classType` 与实际加载器不一致（如写 `UNETLoader` 实际用 `UnetLoaderGGUF`）→ 不进 `/v1/models` | 已修 z-image / krea2-turbo / krea2-four-view；后续换加载器时记得同步改 `classType` |
 | 设置面板里找不到「首选项」 | 实际标签叫 **「偏好设置」**（弹窗：渠道 / 云端 API / 本地代理 / **偏好设置** / 提示词来源 / WebDAV / 资源管理 / 本地存储） | 本文已把音频模型设成默认值，**无需手动选** |
+| TTS 偶尔 `NoAudioReceived` | edge-tts 走微软云，偶发抽风 | `scripts/tts_edge.py` 已内置 3 次重试 + 退避 |
 | 计划任务显示运行但服务已死 | 父进程挂在 WSL 上（详见「启动脚本」章节） | 改用 `scripts/start_comfy.bat` 直启 |
 
 ## 目录结构
