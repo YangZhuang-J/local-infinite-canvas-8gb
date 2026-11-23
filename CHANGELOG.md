@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 本仓库 8GB 适配补丁 v1.0.1 - 2026-11-23
+
+修复「ComfyUI 显示离线 / 工作流大面积不可用 / 部分卡片必报 400」一整套问题。
+
++ [修复] **ComfyUI 会莫名死掉**：`ComfyServer` 计划任务原先走 `wsl.exe bash start_comfy.sh` 启动，父进程挂在 WSL 上，WSL 会话一断 ComfyUI 就跟着消失（计划任务仍显示「正在运行」）。改为 `scripts/start_comfy.bat` 直调 `.venv\Scripts\python.exe`，彻底脱掉 WSL 依赖。
++ [修复] **7 个 H3 工作流误判不可用**（报「缺少运行期依赖：H3 TRT VAE decoder engine」）：`resources.js` 增加 `ADAPTED_H3_IDS` 白名单，自建 H3 图直接跳过运行期依赖检查；同时裁剪 `data/resources-index.json` 里残留的 TRT/ONNX/VDN 声明（这份运行期缓存索引会覆盖 `resources/index.json`）。
++ [修复] **注册表模型默认值指向未安装的官方文件**，导致卡片在校验阶段 400（`Value not in list`）：修正 5 处 —— z-image-turbo / krea2-turbo / krea2-four-view / krea2-aesthetics / seedvr2-upscale（7B → 3B）。
++ [修复] **画布音频模型下拉永远为空**：本地渠道模型列表是硬编码在 `dist` 包里的 `WX=[...]`，原版只含 image/video。往数组插入 `{name:"local-tts",capability:"audio"}`，破缓存参数升到 `?pd=4`。
++ [新增] `scripts/start_comfy.bat`（Windows 直启，推荐）与 `scripts/start_comfy.sh`（自动识别 WSL `/mnt/d` 与 Git Bash `/d`，支持 `--print` 干跑）。
++ [文档] README 补充「为什么启动脚本要避开 WSL」「模型默认值修正」表、已知限制、完整实测性能表（Z-Image 768²=34s、Krea2=61s、H3 Image=152s、SelfLift 1024×576/5s=363s 等）。
+
 ## v0.24.13 - 2026-11-06
 
 + [新增] Qwen 2.1 图像整合包升级到 v2：一个入口包含文生图/编辑/局部重绘/扩图/元素移除五种功能，新增「元素移除」；文生图 8 步，其余 9 步。

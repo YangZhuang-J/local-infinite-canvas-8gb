@@ -11,7 +11,7 @@
   "20": {
     "class_type": "SeedVR2LoadDiTModel",
     "inputs": {
-      "model": "seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors",
+      "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
       "device": "cuda:0",
       "blocks_to_swap": 0,
       "swap_io_components": false,

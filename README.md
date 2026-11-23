@@ -62,9 +62,28 @@
 | `bindings.js` | 支持**单个音频绑定**（`drive_audio`），原来只支持数组音频 |
 | `ui-workflow.js` | 支持音频输出类型；音乐类工作流让 `tags` 优先于 `lyrics` 作为主提示词 |
 | `registry.js` | `inferType()` 里音频判定提到 image 之前（`KSampler` 会误判音乐图为 image） |
-| `resources.js` | 只有工作流**声明了 TRT 依赖**才检查 tensorrt（否则自建 GGUF 工作流会被误判不可用） |
+| `resources.js` | ①只有工作流**声明了 TRT 依赖**才检查 tensorrt；②**`ADAPTED_H3_IDS` 白名单**：7 个自建 H3 工作流直接跳过运行期依赖检查（它们已改 GGUF + SelfLift，根本不需要 TRT/VDN/ONNX） |
 | `update.js` | 屏蔽升级提示（本机已定制，走官方更新会覆盖改动） |
-| `resources/index.json` | 裁掉 7 个 H3 工作流的 TRT/ONNX/VDN 运行期依赖声明 |
+| `resources/index.json` + `data/resources-index.json` | 裁掉 7 个 H3 工作流的 TRT/ONNX/VDN 运行期依赖声明（**两份都要改**，`data/` 那份是运行期缓存索引，会覆盖 `resources/` 的） |
+| `workflows/registry.json` | 修正 5 处 `bindings.*.default` 模型名 —— 原值指向**未安装的官方文件名**，会让卡片直接报 `400 Value not in list`（详见下方「模型默认值修正」） |
+
+#### 模型默认值修正（`registry.json`）
+
+网关的 `bindings` 会用它自己的 `default` **覆盖工作流 JSON 里的模型名**。上游的默认值是官方文件名，本机装的是 GGUF，于是全部 400：
+
+```
+unet_name: 'z_image_turbo_bf16.safetensors' not in [... 'z-image-turbo-Q4_K_M.gguf']
+```
+
+| 工作流 | 原默认值（未安装） | 修正为（本机实际） |
+|---|---|---|
+| `image-z-image-turbo` | `z_image_turbo_bf16.safetensors` | `z-image-turbo-Q4_K_M.gguf` |
+| `image-krea2-turbo` | `krea2_turbo_fp8_scaled.safetensors` | `krea2_turbo-Q3_K_M.gguf` |
+| `image-krea2-four-view` | `krea2_turbo_fp8_scaled.safetensors` | `krea2_turbo-Q3_K_M.gguf` |
+| `image-krea2-aesthetics` | `SinoXvision_Krea2_Aesthetics_fp8_scale.safetensors` | `krea2_turbo-Q3_K_M.gguf` |
+| `image-seedvr2-upscale` | `seedvr2_ema_7b_...safetensors` | `seedvr2_ema_3b_fp8_e4m3fn.safetensors` |
+
+> 换模型 / 换量化档位后，**一定要同步改 registry.json 的 default**，否则卡片会在校验阶段就 400。
 
 ### 4. 前端补丁（`infinite-canvas/web/dist/`）
 
@@ -72,7 +91,8 @@
 |---|---|
 | 去掉「打赏加群」入口 | 只在 `index.html` 加一段 CSS 隐藏（`[aria-label="打赏加群"]{display:none}`），**不改 JS 逻辑** |
 | 右键也能打开创建菜单 | `index-NNUCJQLG.js` 里 `onContextMenu` 处理器改为调用创建菜单（原版只有双击） |
-| 破缓存 | `index.html` 里资源加 `?pd=3`（dist 资源是 `immutable` 缓存） |
+| **音频模型可选** | 本地渠道的模型列表是**硬编码在包里的** `WX=[...]`，原本全是 image/video → 音频节点下拉永远为空。往数组头部插 `{name:"local-tts",capability:"audio"}` |
+| 破缓存 | `index.html` 里资源加 `?pd=4`（dist 资源是 `immutable` 缓存） |
 
 > ⚠️ 若上游更新后重新构建 `dist`，以上前端改动会丢失；CSS 那段在 `index.html` 里可以直接抄回来。
 
@@ -80,6 +100,14 @@
 
 - `start-8gb.bat`：设置 `UPDATE_IGNORE=1` / `UPDATE_ENABLED=0` 后启动（不弹升级提示）
 - `launcher/config.json` 需要按本机路径生成（`setup.ps1` 会做）
+- **`scripts/start_comfy.bat`**：Windows 直启 ComfyUI，**不经过 WSL**（推荐，见下方故障排查）
+- **`scripts/start_comfy.sh`**：Shell 版，自动识别 `/mnt/d`(WSL) 与 `/d`(Git Bash)，支持 `--print` 干跑检查路径
+
+#### ⚠️ 为什么启动脚本要避开 WSL
+
+原先用 `wsl.exe bash /mnt/d/tmp/start_comfy2.sh` 启动 ComfyUI，结果是：**ComfyUI 的父进程挂在 WSL 上**。WSL 会话一断（distro 空闲回收、终端关闭、升级重启），ComfyUI 跟着死，画布就报「ComfyUI 离线」，而计划任务看起来还是「正在运行」。
+
+改成本机 `.venv\\Scripts\\python.exe` 直启后彻底避免。计划任务指向 `scripts/start_comfy.bat` 即可。
 
 ## 硬件要求
 
@@ -163,20 +191,46 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 | 口型镜头较慢 | 必须用单遍 KSampler（SelfLift 不接受音频掩码） | 降分辨率到 768×432 |
 | 画布不能上传音频给自由卡片 | 前端只处理 image 上传 | 用内置卡片 `H3 说话镜头` + 固定文件名 wav，或 `/v1/videos` 直调 |
 | 内置 Agent 未包含 | `assistant/` 131MB 运行时被排除 | 需要时从魔搭下载 `assistant-runtime.zip` |
+| 画布音频模型下拉为空 | 本地渠道模型列表硬编码在 `dist` 包里，原版无 audio 条目 | 已插 `local-tts`；仍需手动在 **设置→首选项→默认模型→默认音频模型** 选一次（存 localStorage） |
+| 卡片报 `400 Value not in list` | `registry.json` 的 `default` 指向未安装的官方模型名 | 已修正 5 处；换模型后记得同步改 |
+| 计划任务显示运行但服务已死 | 父进程挂在 WSL 上（详见「启动脚本」章节） | 改用 `scripts/start_comfy.bat` 直启 |
 
 ## 目录结构
 
 ```
 comfyui-gateway/        网关（Node.js）：工作流注册表 + 参数注入 + 任务队列
-  workflows/            29 个工作流 JSON（API 格式）+ registry.json
+  workflows/            30 个工作流 JSON（API 格式）+ registry.json
   src/                  网关源码（含我们的补丁）
 infinite-canvas/web/dist/  画布前端（预构建，含 CSS 补丁）
 launcher/               启动器（拉起 ComfyUI + 网关 + 画布）
 comfyui-workflows/      画布"自由卡片"工作流（需复制到 ComfyUI 用户目录）
-scripts/                我们的适配脚本（T0 适配 / GGUF 替换 / TTS / 口型测试）
+scripts/                适配脚本 + 启动脚本
+  start_comfy.bat       ★ Windows 直启 ComfyUI（不经 WSL，推荐）
+  start_comfy.sh        Shell 版，/mnt/d 与 /d 双路径自动识别
+  adapt_*.py            T0 适配 / GGUF 替换 / 自建图生成
+  tts_edge*.py          edge-tts 台词音生成
 docs/                   调研笔记（含实测数据、踩坑记录）
 start-8gb.bat           本地适配启动入口
 ```
+
+## 实测性能（RTX 5060 Laptop 8GB）
+
+| 任务 | 分辨率 | 耗时 |
+|---|---|---|
+| **Z-Image Turbo 文生图** | 768² | **34s** ⭐ 最快，适合草稿/分镜 |
+| Krea2 Turbo 文生图 | 768² | 61s |
+| H3 Image 文生图 | 1024² | 152s |
+| H3 Image 编辑 | 1024² | 183s |
+| **SelfLift 文生视频** | 1024×576 / 5s | **363s** ⭐ 甜点分辨率 |
+| SelfLift 文生视频 | 1280×704 / 5s | 全量卸载，>20min ❌ |
+| H3 说话镜头（口型） | 1024×576 / 6.6s | ~22s×60 帧 ≈ 1320s |
+| Qwen2.1 局部重绘 | 1024² | 43.7s |
+| MOSS int8 | 768² | 184s |
+| MoGe 深度图 | — | 302s |
+| ACE-Step 120s 歌曲 | — | 150s |
+| edge-tts 台词 | — | <2s |
+
+> 视频分辨率的硬阈值是 **≈0.74MP**：1024×576(0.59MP)=6 分钟，≥0.90MP 会触发全量卸载，慢 15～20 倍。H3 的宽高必须是 **32 的倍数**（1280×720 直接报错，用 1280×704）。
 
 ## 许可
 

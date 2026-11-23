@@ -1778,7 +1778,16 @@ export function createResourceManager({ config, setup, registry, logger, workflo
 
     // 可用性扫描补运行期依赖：pip 运行库、TRT 编译产物、自定义节点、VDN 整套目录。
     // 普通模型由 setup 的 loader 校验负责，这里不重复报。
+    // [本地修改] 这 7 个 H3 工作流已被改造成 GGUF + SelfLift，不再使用 TRT/VDN/ONNX 组件；
+    // 官方资源索引仍声明这些依赖，会误判为不可用，这里直接跳过运行期依赖检查。
+    const ADAPTED_H3_IDS = new Set([
+        "video-h3-ref2va", "video-h3-t2v", "video-h3-frames",
+        "video-h3-ref2va-novdn", "video-h3-t2v-novdn", "video-h3-frames-novdn",
+        "video-h3-character-swap"
+    ]);
+
     function runtimeProblemsFor(workflowId) {
+        if (ADAPTED_H3_IDS.has(workflowId)) return [];
         if (!index) return [];
         const ids = new Set();
         for (const pack of index.packs || []) {
