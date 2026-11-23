@@ -1516,7 +1516,7 @@
           "label": "SeedVR2 模型",
           "type": "select",
           "optionsFrom": "SeedVR2LoadDiTModel.model",
-          "default": "seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors"
+          "default": "seedvr2_ema_3b_fp8_e4m3fn.safetensors"
         },
         {
           "key": "resolution",
