@@ -60,6 +60,8 @@ export function loadConfig(overrides = {}) {
     canvasDist: path.resolve(overrides.canvasDist ?? process.env.CANVAS_DIST ?? path.join(appRoot, "infinite-canvas", "web", "dist")),
     dataDir: path.resolve(overrides.dataDir ?? process.env.DATA_DIR ?? path.join(rootDir, "data")),
     outputDir: path.resolve(overrides.outputDir ?? process.env.OUTPUT_DIR ?? path.join(rootDir, "data", "outputs")),
+    // [本地修改] 调用本地 TTS/工具脚本用的 Python 解释器（默认取 ComfyUI 的 .venv）
+    helperPythonPath: String(overrides.helperPythonPath ?? process.env.HELPER_PYTHON ?? "").trim(),
     publicBaseUrl: String(overrides.publicBaseUrl ?? process.env.PUBLIC_BASE_URL ?? `http://${host}:${port}`).replace(/\/+$/, ""),
     launcherControlUrl: String(overrides.launcherControlUrl ?? process.env.LAUNCHER_CONTROL_URL ?? "").replace(/\/+$/, ""),
     corsOrigins: overrides.corsOrigins ?? list(process.env.CORS_ORIGINS, "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8188,http://127.0.0.1:8188"),

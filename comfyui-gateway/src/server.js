@@ -1610,6 +1610,42 @@ export async function createGatewayApp(overrides = {}) {
     res.json({ id: task.id, object: "video", status: "queued", progress: 0, created_at: Math.floor(Date.now() / 1000) });
   });
 
+  // [本地修改] 本地 TTS：让画布的「音频」节点可用（OpenAI 兼容 /audio/speech）
+  // 后端用 edge-tts（微软神经语音，中文接近真人）。voice 支持别名：
+  //   alloy=云希(男) / echo=云扬(播音) / fable|onyx=云健(浑厚男) / nova=晓晓(女) / shimmer=晓伊(女)
+  app.post(["/v1/audio/speech", "/audio/speech"], async (req, res) => {
+    const body = req.body || {};
+    const text = String(body.input || body.text || "").trim();
+    if (!text) throw new HttpError("缺少 input（要朗读的文本）", { status: 400, code: "missing_input" });
+    const voice = String(body.voice || "nova");
+    const speed = Number(body.speed);
+    const rate = Number.isFinite(speed) && speed > 0 ? `${Math.round((speed - 1) * 100) / 100 * 100 >= 0 ? "+" : ""}${Math.round((speed - 1) * 100)}%` : "+0%";
+    const format = String(body.response_format || "mp3").toLowerCase();
+    const os = await import("node:os");
+    const fsp = await import("node:fs/promises");
+    const { spawn } = await import("node:child_process");
+    const path = await import("node:path");
+    const script = path.join(config.rootDir, "scripts", "tts_edge.py");
+    if (!fs.existsSync(script)) throw new HttpError("缺少 scripts/tts_edge.py", { status: 500, code: "tts_script_missing" });
+    const out = path.join(os.tmpdir(), `tts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${format === "wav" ? "wav" : "mp3"}`);
+    const py = config.helperPythonPath || path.join(config.comfyDir || "", ".venv", "Scripts", "python.exe");
+    await new Promise((resolve, reject) => {
+      const child = spawn(py, [script, text, voice, rate, out], { windowsHide: true });
+      let err = "";
+      child.stderr.on("data", (d) => { err += d.toString(); });
+      child.on("error", reject);
+      child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(err.slice(-400) || `tts exit ${code}`))));
+    });
+    try {
+      const buf = await fsp.readFile(out);
+      res.setHeader("Content-Type", format === "wav" ? "audio/wav" : "audio/mpeg");
+      res.setHeader("Content-Length", String(buf.length));
+      res.send(buf);
+    } finally {
+      fsp.unlink(out).catch(() => {});
+    }
+  });
+
   app.post("/v1/images/generations", async (req, res) => {
     await reloadRegistryAndSnapshot();
     const body = req.body || {};
