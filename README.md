@@ -99,7 +99,6 @@ unet_name: 'z_image_turbo_bf16.safetensors' not in [... 'z-image-turbo-Q4_K_M.gg
 > ⚠️ 若上游更新后重新构建 `dist`，以上前端改动会丢失；CSS 那段在 `index.html` 里可以直接抄回来。
 
 ### 5. 启动脚本
-
 - `start-8gb.bat`：设置 `UPDATE_IGNORE=1` / `UPDATE_ENABLED=0` 后启动（不弹升级提示）
 - `launcher/config.json` 需要按本机路径生成（`setup.ps1` 会做）
 - **`scripts/start_comfy.bat`**：Windows 直启 ComfyUI，**不经过 WSL**（推荐，见下方故障排查）
@@ -110,6 +109,39 @@ unet_name: 'z_image_turbo_bf16.safetensors' not in [... 'z-image-turbo-Q4_K_M.gg
 原先用 `wsl.exe bash /mnt/d/tmp/start_comfy2.sh` 启动 ComfyUI，结果是：**ComfyUI 的父进程挂在 WSL 上**。WSL 会话一断（distro 空闲回收、终端关闭、升级重启），ComfyUI 跟着死，画布就报「ComfyUI 离线」，而计划任务看起来还是「正在运行」。
 
 改成本机 `.venv\\Scripts\\python.exe` 直启后彻底避免。计划任务指向 `scripts/start_comfy.bat` 即可。
+
+## 自研插件：画板（sketch:pad）
+
+> 上游 Infinite Canvas **没有**这个功能，是本仓库手写新增的插件。详见 [`docs/画板插件.md`](docs/画板插件.md)。
+
+**解决什么：** 本地出图最容易卡住的是「想法写不成提示词」。画板让你**用手画**——构个草图、描一张参考图、手绘一块蒙版——把结果直接当参考图喂给生成卡。
+
+| 用法 | 流程 |
+|---|---|
+| 构图草图 | 画火柴人/几何构图 → 导出图片节点 → 接 Krea2 / Z-Image |
+| 描摹定妆 | 把角色图连到画板当 28% 半透明底图 → 描线稿 → 导出 → 接 H3 Image 编辑 |
+| 手绘蒙版 | 把原图连进来 → 橡皮擦出要保留的区域 → 导出 → 接 Qwen2.1 局部重绘 |
+
+**怎么用：** 双击画布 → 菜单选「画板」→ 双击卡片开全屏画板 → `Enter` 完成 → 工具条「导出图片」变图片节点。
+
+| 能力 | 细节 |
+|---|---|
+| 笔触引擎 | 内联 **perfect-freehand 1.2.3**（MIT），离线可用 |
+| 工具 | 画笔 `B` / 橡皮 `E`，粗细 2~48，手写笔支持压感 |
+| 历史 | `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` |
+| 画布尺寸 | 1024² / 1024×576 / 576×1024 / 768² |
+| 底图描摹 | 连入图片按 28% 透明度铺底，可开关 |
+| 下游 | 实现了 `resource()`，可直接当图片资源拉给任意图像卡 |
+
+**文件**（三个位置都要一致）：
+
+```
+infinite-canvas/web/dist/plugins/sketch-pad.js     ← 运行时加载
+infinite-canvas/web/public/plugins/sketch-pad.js   ← 源码位备份
+infinite-canvas/web/dist/plugins/index.json        ← 插件清单（第四条必须存在）
+```
+
+> ⚠️ 插件是**手写**的，不走构建。上游升级/重装后要手动把 `sketch-pad.js` 和 `index.json` 的第四条抄回来。
 
 ## 硬件要求
 
@@ -207,6 +239,7 @@ comfyui-gateway/        网关（Node.js）：工作流注册表 + 参数注入 
   workflows/            30 个工作流 JSON（API 格式）+ registry.json
   src/                  网关源码（含我们的补丁）
 infinite-canvas/web/dist/  画布前端（预构建，含 CSS 补丁）
+  plugins/              插件目录（含自研的 sketch-pad.js 画板）
 launcher/               启动器（拉起 ComfyUI + 网关 + 画布）
 comfyui-workflows/      画布"自由卡片"工作流（需复制到 ComfyUI 用户目录）
 scripts/                适配脚本 + 启动脚本
@@ -214,7 +247,8 @@ scripts/                适配脚本 + 启动脚本
   start_comfy.sh        Shell 版，/mnt/d 与 /d 双路径自动识别
   adapt_*.py            T0 适配 / GGUF 替换 / 自建图生成
   tts_edge*.py          edge-tts 台词音生成
-docs/                   调研笔记（含实测数据、踩坑记录）
+docs/                   调研笔记 + 插件文档
+    画板插件.md          ★ sketch:pad 的设计、操作与二次开发入口
 start-8gb.bat           本地适配启动入口
 ```
 
