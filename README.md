@@ -30,6 +30,32 @@
 | 超分 | ESRGAN 2× / SeedVR2 | 秒级 ~ 19 分钟 |
 | 出歌 / BGM | ACE-Step 1.5 | 120 秒歌 ≈ 150 秒 |
 
+## 版本与更新通道（重要）
+
+**本仓库是 8GB 二次开发版，不跟随上游更新。**
+
+| 项 | 值 |
+|---|---|
+| 版本号 | `v0.24.13-8gb.2`（`-8gb.N` 后缀 = 本仓库第 N 个迭代，与上游 v0.24.13 区分） |
+| 应用内「GitHub 仓库」链接 | 指向**本仓库**，文案附带上游署名 |
+| 应用内「版本更新」说明 | 首条为本仓库改动摘要，其后是上游历史说明 |
+| 一键更新 | **已停用**（`update.json` 里 `updateDisabled: true`） |
+| 应用目录 git remote | 只保留 `upstream`（上游魔搭源），**没有 `origin`**，避免误拉取覆盖定制 |
+
+### 为什么停用一键更新
+
+本仓库相对上游有 15+ 处深度补丁（GGUF 化工作流、脱 WSL 启动、TRT 依赖白名单、registry 模型默认值、音频链路、自研画板…）。
+直接 `git pull` 上游或应用作者发的 `patch.zip` 会把这些全部覆盖，且覆盖后服务起不来（工作流引用的模型名/节点都不对了）。
+
+需要跟进上游时请手动做：`git fetch upstream` → 逐条 diff → 只挑需要的改动。
+
+### 上游署名（MIT 要求，不可删）
+
+- 上游网关/启动器/集成：`1314521gjy/ComfyUI-Local-Infinite-Canvas`（MIT）
+- 画布本体：`basketikun/infinite-canvas`（MIT）
+- 署名保留在 `LICENSE` / `NOTICE.md` / `THIRD_PARTY_NOTICES.md`，应用内链接文案也标注 "基于 1314521gjy（MIT）"
+- 模型文件的下载地址仍指向魔搭 `shensanshu/ComfyUI-Local-Infinite-Canvas`（那是几十 GB 权重的真实托管位置，无法搬到自己仓库）
+
 ## 与上游的差异（我们的改动）
 
 ### 1. 模型全部换成 8GB 能跑的形态
