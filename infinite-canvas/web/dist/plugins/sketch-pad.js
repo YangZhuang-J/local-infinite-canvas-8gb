@@ -1,11 +1,16 @@
 /**
- * 手绘画板节点（sketch:pad）  v1.1.0
+ * 手绘画板节点（sketch:pad）  v1.2.0
  *
  * 用途：手绘/描摹线稿 → 直接当「参考图片」参与生成（连到生成配置或图片卡即可），
  *       或点「导出为图片卡」变成普通图片节点，继续走裁剪/局部重绘/超分等链路。
  *
  * 交互：双击画板卡片（或悬浮工具条「打开画板」）→ 全屏画板 → 完成保存。
  *       把一张图片连到画板节点上，画板会把它作为半透明底图供描摹（可开关）。
+ *
+ * v1.2.0 新增（B1/B2/B4）
+ *   B1 图形工具：直线 L / 矩形 U / 椭圆 O / 箭头 A（Shift 约束 45° 与正方形）
+ *   B2 文字标注：文字 T，点击位置输入多行文字（当前色，字号随粗细）
+ *   B4 改画布尺寸时按比例缩放已有笔画/图形/文字，不再清空
  *
  * v1.1.0 新增（A1–A4）
  *   A1 缩放/平移：滚轮以光标为锚点缩放（0.2×–8×）、空格+拖拽 / 中键拖拽平移、
@@ -99,6 +104,72 @@ export default function (runtime) {
     /** 把一条笔触/一次填充画到指定图层（统一入口，回放与实时预览共用） */
     function drawOp(context, op) {
         if (!op) return;
+
+        // ---- 图形：直线 / 箭头 / 矩形 / 椭圆（B1）
+        if (op.mode === "shape") {
+            const points = Array.isArray(op.points) ? op.points : [];
+            const from = points[0];
+            const to = points[1];
+            if (!from || !to) return;
+            context.save();
+            context.strokeStyle = strokeColor(op);
+            context.fillStyle = strokeColor(op);
+            context.lineWidth = Math.max(1, op.size);
+            context.lineCap = "round";
+            context.lineJoin = "round";
+            context.beginPath();
+            if (op.shape === "rect") {
+                context.rect(
+                    Math.min(from[0], to[0]),
+                    Math.min(from[1], to[1]),
+                    Math.abs(to[0] - from[0]),
+                    Math.abs(to[1] - from[1]),
+                );
+            } else if (op.shape === "ellipse") {
+                context.ellipse(
+                    (from[0] + to[0]) / 2,
+                    (from[1] + to[1]) / 2,
+                    Math.abs(to[0] - from[0]) / 2,
+                    Math.abs(to[1] - from[1]) / 2,
+                    0,
+                    0,
+                    Math.PI * 2,
+                );
+            } else {
+                context.moveTo(from[0], from[1]);
+                context.lineTo(to[0], to[1]);
+            }
+            context.stroke();
+            if (op.shape === "arrow") {
+                const angle = Math.atan2(to[1] - from[1], to[0] - from[0]);
+                const head = Math.max(10, op.size * 4);
+                [Math.PI / 7, -Math.PI / 7].forEach((delta) => {
+                    context.beginPath();
+                    context.moveTo(to[0], to[1]);
+                    context.lineTo(to[0] - head * Math.cos(angle + delta), to[1] - head * Math.sin(angle + delta));
+                    context.stroke();
+                });
+            }
+            context.restore();
+            return;
+        }
+
+        // ---- 文字标注（B2）
+        if (op.mode === "text") {
+            const at = (op.points || [])[0];
+            const text = typeof op.text === "string" ? op.text : "";
+            if (!at || !text) return;
+            const size = Math.max(12, Number(op.size) || 24);
+            context.save();
+            context.fillStyle = strokeColor(op);
+            context.font = '600 ' + size + 'px "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif';
+            context.textBaseline = "top";
+            text.split("\n").forEach((line, index) => {
+                context.fillText(line, at[0], at[1] + index * size * 1.28);
+            });
+            context.restore();
+            return;
+        }
 
         // ---- 选区：填充 / 擦除（A4）
         if (op.mode === "fill" || op.mode === "cut") {
@@ -224,6 +295,18 @@ export default function (runtime) {
         });
         toolGroup.append(brushButton, eraserButton, selectButton);
 
+        // ---- 图形与文字（B1 / B2）
+        const shapeGroup = el("div", "sk-group");
+        const lineButton = el("button", "sk-btn", "直线 L");
+        const rectButton = el("button", "sk-btn", "矩形 U");
+        const ellipseButton = el("button", "sk-btn", "椭圆 O");
+        const arrowButton = el("button", "sk-btn", "箭头 A");
+        const textButton = el("button", "sk-btn", "文字 T");
+        [lineButton, rectButton, ellipseButton, arrowButton, textButton].forEach((button) => {
+            button.type = "button";
+        });
+        shapeGroup.append(lineButton, rectButton, ellipseButton, arrowButton, textButton);
+
         // ---- 选区子模式（A4）
         const selectGroup = el("div", "sk-group");
         const fillButton = el("button", "sk-btn sk-mini", "填充");
@@ -318,14 +401,14 @@ export default function (runtime) {
         cancelButton.type = "button";
         doneButton.type = "button";
 
-        bar.append(toolGroup, selectGroup, sizeWrap, colorGroup, historyGroup);
-        bar2.append(zoomGroup, sizeSelect, exportSelect, guideWrap, spacer, cancelButton, doneButton);
+        bar.append(toolGroup, shapeGroup, selectGroup, sizeWrap, colorGroup);
+        bar2.append(historyGroup, zoomGroup, sizeSelect, exportSelect, guideWrap, spacer, cancelButton, doneButton);
         panel.append(bar, bar2, viewport, hint);
         root.appendChild(panel);
         document.body.appendChild(root);
 
         hint.textContent =
-            "滚轮缩放 · 空格/中键拖拽平移 · B 笔刷 · E 橡皮 · R 选区（填充/擦空）· 1–6 换色 · Ctrl+Z 撤销 · Enter 完成 · Esc 取消";
+            "滚轮缩放 · 空格/中键平移 · B 笔刷 · E 橡皮 · R 选区 · L 直线 · U 矩形 · O 椭圆 · A 箭头 · T 文字 · Shift 约束 · 1–6 换色 · Ctrl+Z 撤销 · Enter 完成";
 
         // ---- 画布
         const displayContext = display.getContext("2d");
@@ -424,6 +507,11 @@ export default function (runtime) {
             brushButton.dataset.active = String(state.tool === "brush");
             eraserButton.dataset.active = String(state.tool === "eraser");
             selectButton.dataset.active = String(state.tool === "select");
+            lineButton.dataset.active = String(state.tool === "line");
+            rectButton.dataset.active = String(state.tool === "rect");
+            ellipseButton.dataset.active = String(state.tool === "ellipse");
+            arrowButton.dataset.active = String(state.tool === "arrow");
+            textButton.dataset.active = String(state.tool === "text");
             fillButton.dataset.active = String(state.selectMode === "fill");
             cutButton.dataset.active = String(state.selectMode === "cut");
             fillButton.disabled = state.tool !== "select";
@@ -439,7 +527,15 @@ export default function (runtime) {
             zoomLabel.textContent = `${Math.round(camera.zoom * 100)}%`;
             zoomOutButton.disabled = camera.zoom <= ZOOM_MIN + 0.001;
             zoomInButton.disabled = camera.zoom >= ZOOM_MAX - 0.001;
-            stage.style.cursor = panning ? "grabbing" : spaceDown ? "grab" : state.tool === "select" ? "cell" : "crosshair";
+            stage.style.cursor = panning
+                ? "grabbing"
+                : spaceDown
+                  ? "grab"
+                  : state.tool === "select"
+                    ? "cell"
+                    : state.tool === "text"
+                      ? "text"
+                      : "crosshair";
         }
 
         // ---- 指针绘制
@@ -479,6 +575,40 @@ export default function (runtime) {
             }
 
             const point = pointFrom(event);
+
+            if (state.tool === "text") {
+                const text = window.prompt("输入文字（\\n 换行）：", "");
+                if (text && text.trim()) {
+                    state.strokes.push({
+                        mode: "text",
+                        text: text.replace(/\\n/g, "\n"),
+                        size: Math.max(12, state.brush * 3),
+                        color: state.color,
+                        points: [[point[0], point[1]]],
+                    });
+                    state.redo = [];
+                    replayCommitted();
+                    syncUI();
+                }
+                return;
+            }
+
+            if (state.tool === "line" || state.tool === "rect" || state.tool === "ellipse" || state.tool === "arrow") {
+                live = {
+                    mode: "shape",
+                    shape: state.tool,
+                    size: state.brush,
+                    color: state.color,
+                    points: [
+                        [point[0], point[1]],
+                        [point[0], point[1]],
+                    ],
+                    shift: Boolean(event.shiftKey),
+                };
+                drawLive();
+                return;
+            }
+
             smoothedPressure = point[2];
             live = {
                 mode: state.tool === "eraser" ? "eraser" : "brush",
@@ -508,6 +638,31 @@ export default function (runtime) {
             }
             if (!live) return;
             const point = pointFrom(event);
+
+            if (live.mode === "shape") {
+                const from = live.points[0];
+                let toX = point[0];
+                let toY = point[1];
+                if (event.shiftKey) {
+                    if (live.shape === "line" || live.shape === "arrow") {
+                        // 约束到 45° 的整数倍
+                        const angle = Math.atan2(toY - from[1], toX - from[0]);
+                        const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+                        const length = Math.hypot(toX - from[0], toY - from[1]);
+                        toX = from[0] + length * Math.cos(snapped);
+                        toY = from[1] + length * Math.sin(snapped);
+                    } else {
+                        // 矩形/椭圆约束成正方形/正圆
+                        const side = Math.max(Math.abs(toX - from[0]), Math.abs(toY - from[1]));
+                        toX = from[0] + Math.sign(toX - from[0] || 1) * side;
+                        toY = from[1] + Math.sign(toY - from[1] || 1) * side;
+                    }
+                }
+                live.points[1] = [toX, toY];
+                drawLive();
+                return;
+            }
+
             const last = live.points[live.points.length - 1];
             if (Math.abs(point[0] - last[0]) + Math.abs(point[1] - last[1]) < 1.2 / camera.zoom) return;
             live.points.push(point);
@@ -545,6 +700,28 @@ export default function (runtime) {
                 return;
             }
             if (!live) return;
+
+            if (live.mode === "shape") {
+                const from = live.points[0];
+                const to = live.points[1];
+                const distance = Math.hypot(to[0] - from[0], to[1] - from[1]);
+                if (distance >= 2) {
+                    state.strokes.push({
+                        mode: "shape",
+                        shape: live.shape,
+                        size: live.size,
+                        color: live.color,
+                        points: [from, to],
+                    });
+                    state.redo = [];
+                }
+                live = null;
+                liveContext.clearRect(0, 0, state.width, state.height);
+                replayCommitted();
+                syncUI();
+                return;
+            }
+
             if (live.points.length === 1) {
                 const only = live.points[0];
                 live.points.push([only[0] + 0.6, only[1] + 0.6, only[2], only[3]]);
@@ -585,6 +762,11 @@ export default function (runtime) {
         brushButton.addEventListener("click", () => paintMode("brush"));
         eraserButton.addEventListener("click", () => paintMode("eraser"));
         selectButton.addEventListener("click", () => paintMode("select"));
+        lineButton.addEventListener("click", () => paintMode("line"));
+        rectButton.addEventListener("click", () => paintMode("rect"));
+        ellipseButton.addEventListener("click", () => paintMode("ellipse"));
+        arrowButton.addEventListener("click", () => paintMode("arrow"));
+        textButton.addEventListener("click", () => paintMode("text"));
         fillButton.addEventListener("click", () => {
             state.selectMode = "fill";
             paintMode("select");
@@ -633,18 +815,24 @@ export default function (runtime) {
         sizeSelect.addEventListener("change", () => {
             const [nextWidth, nextHeight] = sizeSelect.value.split("x").map(Number);
             if (!nextWidth || !nextHeight) return;
-            if (state.strokes.length && !window.confirm("更改画布尺寸会清空当前笔画，继续？")) {
-                sizeSelect.value = `${state.width}x${state.height}`;
-                return;
-            }
+            const scaleX = nextWidth / state.width;
+            const scaleY = nextHeight / state.height;
+            // B4：按比例缩放已有内容，不再清空
+            state.strokes = state.strokes.map((op) => ({
+                ...op,
+                size: op.size ? op.size * ((scaleX + scaleY) / 2) : op.size,
+                points: Array.isArray(op.points)
+                    ? op.points.map((point) => [point[0] * scaleX, point[1] * scaleY, point[2], point[3]])
+                    : op.points,
+                path: Array.isArray(op.path) ? op.path.map((point) => [point[0] * scaleX, point[1] * scaleY]) : op.path,
+            }));
+            state.redo = [];
             state.width = nextWidth;
             state.height = nextHeight;
             [display, committed, liveCanvas].forEach((canvas) => {
                 canvas.width = nextWidth;
                 canvas.height = nextHeight;
             });
-            state.strokes = [];
-            state.redo = [];
             live = null;
             marquee = null;
             fit();
@@ -739,6 +927,11 @@ export default function (runtime) {
             if (key === "b") paintMode("brush");
             else if (key === "e") paintMode("eraser");
             else if (key === "r") paintMode("select");
+            else if (key === "l") paintMode("line");
+            else if (key === "u") paintMode("rect");
+            else if (key === "o") paintMode("ellipse");
+            else if (key === "a") paintMode("arrow");
+            else if (key === "t") paintMode("text");
             else if (key === "+" || key === "=") zoomAt(1.25);
             else if (key === "-" || key === "_") zoomAt(1 / 1.25);
             else if (key === "0") resetCamera();
@@ -889,8 +1082,8 @@ export default function (runtime) {
     return {
         id: "sketch-pad",
         name: "手绘画板",
-        version: "1.1.0",
-        description: "手绘/描摹线稿：缩放描摹、彩色标注、套索填充/擦空，导出线稿或合成图当参考图。",
+        version: "1.2.0",
+        description: "手绘画板：缩放描摹、彩色标注、套索填充/擦空、直线/矩形/椭圆/箭头/文字，可导出线稿或合成图。",
         defaultEnabled: true,
         css: `
             .sk-root { position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center; background: rgba(8,10,14,.78); font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #e6e9ef; }
