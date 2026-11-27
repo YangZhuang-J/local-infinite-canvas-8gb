@@ -177,6 +177,41 @@ infinite-canvas/web/dist/plugins/index.json        ← 插件清单（第四条�
 
 > ⚠️ 插件是**手写**的，不走构建。上游升级/重装后要手动把 `sketch-pad.js` 和 `index.json` 的第四条抄回来。
 
+## 配音（TTS）：8 个真实中文音色
+
+画布的音频节点走网关的 OpenAI 兼容接口 `POST /v1/audio/speech`，后端是 **edge-tts**（微软神经语音，免费、离线不占显存但需要联网）。
+
+### 下拉里的 8 个音色
+
+| 音色名 | 描述 | 适合 |
+|---|---|---|
+| `zh-CN-YunjianNeural` | 云健 · 男·浑厚 | 旁白、猪八戒这类粗嗓 |
+| `zh-CN-YunyangNeural` | 云扬 · 男·播音 | 叙事旁白（默认） |
+| `zh-CN-YunxiNeural` | 云希 · 男·年轻 | 少年、书生 |
+| `zh-CN-YunxiaNeural` | 云夏 · 男·少年 | 童子、少年感 |
+| `zh-CN-XiaoxiaoNeural` | 晓晓 · 女·温暖 | 女主、温柔旁白 |
+| `zh-CN-XiaoyiNeural` | 晓伊 · 女·活泼 | 少女、俏皮 |
+| `zh-CN-liaoning-XiaobeiNeural` | 晓北 · 女·东北 | 方言角色 |
+| `zh-CN-shaanxi-XiaoniNeural` | 晓妮 · 女·陕西 | 方言角色 |
+
+> edge-tts 的中文音色**总共只有这 8 个**（另有方言），OpenAI 那套 13 个名字（alloy/ash/ballad/coral/echo/fable/nova/onyx/sage/shimmer/verse/marin/cedar）在本机是**别名**，仍可调用，会自动映射到上表音色。
+
+### 三个必须知道的实现细节
+
+| 项 | 说明 |
+|---|---|
+| **台词走 base64 传参** | Windows 命令行会把非 ASCII 变成 `U+FFFD`，直接当 argv 传给 Python 会导致「念乱码 / 返回空音频」。网关改成 `--b64:<base64>`，Python 侧解码 |
+| **结果缓存 10 分钟** | 同一句 + 同一音色重复生成直接命中（响应头 `X-TTS-Cache: hit`），调音色/重试不重复打云端 |
+| **串行 + 失败冷却** | 同一时刻只跑一个 edge-tts；正常间隔 0.8s；一旦出现空音频失败，进入 20s 全局冷却，冷却期内请求排队 |
+
+### 已知限制
+
+| 症状 | 原因 | 处理 |
+|---|---|---|
+| 偶发 `503 微软 TTS 暂未返回音频` | 微软免费端点限流（短时间请求过多） | 等 20~60 秒重试；网关已自动冷却 |
+| 音色听起来有重复 | 13 个别名映射到 8 个音色，必有重叠 | 正常现象，按上表挑音色 |
+| 批量几十句较慢 | 每句 2~4 秒（云端合成） | 大批量建议后续接本地 IndexTTS（权重已下，待独立环境） |
+
 ## 硬件要求
 
 | 项目 | 最低 | 说明 |
@@ -263,7 +298,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 | 卡片报 `400 Value not in list` | `registry.json` 的 `default` 指向未安装的官方模型名 | 已修正 5 处；换模型后记得同步改 |
 | 画布里找不到某张卡 | 该工作流的 `baseModels.classType` 与实际加载器不一致（如写 `UNETLoader` 实际用 `UnetLoaderGGUF`）→ 不进 `/v1/models` | 已修 z-image / krea2-turbo / krea2-four-view；后续换加载器时记得同步改 `classType` |
 | 设置面板里找不到「首选项」 | 实际标签叫 **「偏好设置」**（弹窗：渠道 / 云端 API / 本地代理 / **偏好设置** / 提示词来源 / WebDAV / 资源管理 / 本地存储） | 本文已把音频模型设成默认值，**无需手动选** |
-| TTS 偶尔 `NoAudioReceived` | edge-tts 走微软云，偶发抽风 | `scripts/tts_edge.py` 已内置 3 次重试 + 退避 |
+| TTS 偶尔 `NoAudioReceived` | edge-tts 走微软免费端点，短时间请求多会被限流 | 已内置 4 次重试 + 退避；网关串行 + 失败后 20s 冷却 + 10 分钟缓存 |
 | 计划任务显示运行但服务已死 | 父进程挂在 WSL 上（详见「启动脚本」章节） | 改用 `scripts/start_comfy.bat` 直启 |
 
 ## 目录结构

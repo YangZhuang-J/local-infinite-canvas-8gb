@@ -1610,6 +1610,19 @@ export async function createGatewayApp(overrides = {}) {
     res.json({ id: task.id, object: "video", status: "queued", progress: 0, created_at: Math.floor(Date.now() / 1000) });
   });
 
+  // [本地修改] TTS 串行队列：edge-tts 高并发会返回空音频，串起来跑更稳
+  let ttsQueue = Promise.resolve();
+  // [本地修改] 正常情况只留 0.8s 间隔（够去抖），一旦出现空音频失败就进入 20s 全局冷却，
+  // 冷却期内所有请求排队等待，避免连环失败。实测：正常连发可过，偶发限流时靠冷却恢复。
+  let ttsLastStartAt = 0;
+  let ttsCooldownUntil = 0;
+  const TTS_MIN_INTERVAL_MS = 800;
+  const TTS_COOLDOWN_MS = 20000;
+  // [本地修改] TTS 结果缓存：同一句台词反复生成（调音色/重试）直接命中，少打微软云
+  const ttsCache = new Map();
+  const TTS_CACHE_TTL_MS = 10 * 60 * 1000;
+  const TTS_CACHE_MAX = 60;
+
   // [本地修改] 本地 TTS：让画布的「音频」节点可用（OpenAI 兼容 /audio/speech）
   // 后端用 edge-tts（微软神经语音，中文接近真人）。voice 支持别名：
   //   alloy=云希(男) / echo=云扬(播音) / fable|onyx=云健(浑厚男) / nova=晓晓(女) / shimmer=晓伊(女)
@@ -1627,19 +1640,75 @@ export async function createGatewayApp(overrides = {}) {
     const path = await import("node:path");
     const script = path.join(config.rootDir, "scripts", "tts_edge.py");
     if (!fs.existsSync(script)) throw new HttpError("缺少 scripts/tts_edge.py", { status: 500, code: "tts_script_missing" });
+    const cacheKey = `${voice}|${rate}|${format}|${text}`;
+    const cached = ttsCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < TTS_CACHE_TTL_MS) {
+      res.setHeader("Content-Type", cached.contentType);
+      res.setHeader("Content-Length", String(cached.buffer.length));
+      res.setHeader("X-TTS-Cache", "hit");
+      return res.send(cached.buffer);
+    }
+
     const out = path.join(os.tmpdir(), `tts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${format === "wav" ? "wav" : "mp3"}`);
     const py = config.helperPythonPath || path.join(config.comfyDir || "", ".venv", "Scripts", "python.exe");
-    await new Promise((resolve, reject) => {
-      const child = spawn(py, [script, text, voice, rate, out], { windowsHide: true });
+    // 串行化：edge-tts 对高并发不友好（会 NoAudioReceived），同一时刻只跑一个
+const ttsRun = ttsQueue.then(async () => {
+      const gap = Math.max(TTS_MIN_INTERVAL_MS - (Date.now() - ttsLastStartAt), ttsCooldownUntil - Date.now());
+      if (gap > 0) await new Promise((r) => setTimeout(r, gap));
+      ttsLastStartAt = Date.now();
+      return new Promise((resolve, reject) => {
+        const childEnv = { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+        delete childEnv.PYTHONHOME;
+        delete childEnv.PYTHONPATH;
+        // 台词用 base64 传参：Windows 命令行会把非 ASCII 变成 U+FFFD，必须避开
+        const textArg = "--b64:" + Buffer.from(text, "utf8").toString("base64");
+        const child = spawn(py, [script, textArg, voice, rate, out], { windowsHide: true, env: childEnv });
       let err = "";
       child.stderr.on("data", (d) => { err += d.toString(); });
       child.on("error", reject);
-      child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(err.slice(-400) || `tts exit ${code}`))));
+      child.on("exit", (code) => {
+        if (code === 0) return resolve();
+        const detail = err.slice(-400) || `tts exit ${code}`;
+        try {
+          fs.appendFileSync(path.join(config.rootDir, "data", "tts.log"),
+            `[${new Date().toISOString()}] py=${py} voice=${voice} rate=${rate} code=${code}` +` out=${out}` +` env=${JSON.stringify(Object.fromEntries(Object.entries(process.env).filter(([k]) => /PYTHON|SSL|PROXY|CERT|NODE_|ELECTRON/i.test(k))))}` +` text=${JSON.stringify(text).slice(0, 40)}` +
+            String.fromCharCode(10) + err.slice(-1200) + String.fromCharCode(10));
+        } catch { /* 日志失败不影响主流程 */ }
+        // 音色真的不被后端接受 → 400 + 可读清单（别让前端误报成“Base URL/Key 错误”）
+        if (/Invalid voice/i.test(detail)) {
+          return reject(
+            new HttpError(
+              `音色 ${voice} 不受支持。可用：alloy/ash/ballad/coral/echo/fable/nova/onyx/sage/shimmer/verse/marin/cedar，或 zh-CN-XiaoxiaoNeural 这类原生音色名`,
+              { status: 400, code: "unsupported_voice", cause: detail },
+            ),
+          );
+        }
+        // 微软云端没吐音频（限流/网络抖动/并发过高）→ 503，明确提示可重试
+        if (/no audio was received|NoAudioReceived/i.test(detail)) {
+          ttsCooldownUntil = Date.now() + TTS_COOLDOWN_MS;
+          return reject(
+            new HttpError("微软 TTS 暂未返回音频（并发或限流），请稍后重试；连续生成建议间隔 1-2 秒", {
+              status: 503,
+              code: "tts_no_audio",
+              cause: detail,
+            }),
+          );
+        }
+        reject(new Error(detail));
+      });
+      });
     });
+    // 队列本身要吞掉失败继续跑；本请求的失败通过 await ttsRun 单独抛出
+    ttsQueue = ttsRun.catch(() => {});
+    await ttsRun;
     try {
       const buf = await fsp.readFile(out);
-      res.setHeader("Content-Type", format === "wav" ? "audio/wav" : "audio/mpeg");
+      const contentType = format === "wav" ? "audio/wav" : "audio/mpeg";
+      ttsCache.set(cacheKey, { buffer: buf, at: Date.now(), contentType });
+      if (ttsCache.size > TTS_CACHE_MAX) ttsCache.delete(ttsCache.keys().next().value);
+      res.setHeader("Content-Type", contentType);
       res.setHeader("Content-Length", String(buf.length));
+      res.setHeader("X-TTS-Cache", "miss");
       res.send(buf);
     } finally {
       fsp.unlink(out).catch(() => {});

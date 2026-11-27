@@ -1,7 +1,7 @@
 {
-  "version": "v0.24.13-8gb.2",
-  "publishedAt": "2026-11-26",
-  "notes": "8GB 定制版（v0.24.13-8gb.2）：自研画板插件 sketch:pad；ComfyUI 脱 WSL 直启；H3 工作流 TRT 依赖白名单；registry 模型默认值修正；画布音频链路（/v1/audio/speech + local-tts）。上游更新通道已停用——定制改动会被覆盖，请勿执行一键更新。",
+  "version": "v0.24.13-8gb.3",
+  "publishedAt": "2026-11-27",
+  "notes": "8GB 定制版（v0.24.13-8gb.3）：修复音频节点 500（音色映射）+ 中文台词 base64 传参 + TTS 串行/缓存/冷却；画布音色下拉改为 8 个真实中文音色。上游更新通道保持停用。",
   "repository": "https://github.com/YangZhuang-J/local-infinite-canvas-8gb",
   "upstream": {
     "repository": "https://github.com/1314521gjy/ComfyUI-Local-Infinite-Canvas",
